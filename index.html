@@ -1,124 +1,415 @@
 <!DOCTYPE html>
 <html lang="pl">
 <head>
-    <meta charset="UTF-8">
-    <!-- Prosty wizualizator dowodów e-Doręczen w postaci plików XML. 
-         Autor: Robert Błaut -->
-    <style type='text/css'>
-        body, form {
-          font-family: sans-serif;
-          margin: 1em;
-        }
-        h2 {
-          text-align: center;
-        }
-
-        form,
-        #content {
-          max-width: 1200px
-        }
-
-        form {
-          margin: auto;
-        }
-
-        input {
-          display: block;
-          margin: 2em 0;
-        }
-
-        #content {
-          border: 1px solid silver;
-          margin: auto;
-        }
-
-        #content * {
-          display: block;
-          margin: 1em;
-          font-weight: bold;
-        }
-
-        #content span {
-          display: inline;
-          font-weight: normal;
-          margin: 0 0.2em 0 0;
-        }
-
-        #content mstns\:danebiometryczne,
-        #content ds\:signature,
-        #content mstns\:SHA256  {
-          display: none !important;
-        }
-
-        #content img {
-          border: 1px solid green;
-          display: inline-block;
-          max-width:100%;
-        }
-    </style>
-    <script src="https://ajax.googleapis.com/ajax/libs/jquery/2.1.1/jquery.min.js">
-    </script>
-    <title>Wizualizator dowodów eDoręczen</title>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-p6Y5xZ9m2xDMlvagai+bT4yXzgDKm8rz+tR5kTnSpZM=' 'sha256-0U/hTflkXWtaTGoLa7pa1XB04orEQOaqHiEgzzzRAIg='; style-src 'sha256-Pk5ZmJm5dju0ibx1dOs+s1HVLP9yFzDRKSCBTVor2go=' 'sha256-sjyodp8rq4XvbXTOb2RifDsMZrfkBv2PNcNQkIXSXLQ='; img-src data:; connect-src 'none'; object-src 'none';">
+  <title>Wizualizacja EPO XML</title>
+  <style>
+    :root {
+      --bg: #f4f7f2; --panel: #ffffff; --ink: #1e2a1f; --muted: #5a6b5a;
+      --accent: #2f7a48; --accent-2: #c5e0cd; --border: #d5e3d5;
+      --warn: #8f5f00; --ok: #1f6e3a;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: "Avenir Next", "Segoe UI", Tahoma, Arial, sans-serif;
+      color: var(--ink);
+      background:
+        radial-gradient(circle at 10% 10%, #e6f2e8 0%, transparent 45%),
+        radial-gradient(circle at 90% 85%, #e9f5ee 0%, transparent 40%),
+        var(--bg);
+      min-height: 100vh;
+    }
+    .wrap { max-width: 860px; margin: 32px auto; padding: 0 16px; }
+    .card { background: var(--panel); border: 1px solid var(--border);
+            border-radius: 16px; box-shadow: 0 10px 30px rgba(25,60,35,.08);
+            overflow: hidden; }
+    .head { padding: 20px 24px; border-bottom: 1px solid var(--border);
+            background: linear-gradient(135deg, #f0f8f3 0%, #ffffff 75%); }
+    h1    { margin: 0 0 6px; font-size: 1.35rem; letter-spacing: .2px; }
+    .sub  { margin: 0; color: var(--muted); font-size: .95rem; }
+    .body { padding: 22px 24px; display: grid; gap: 14px; }
+    .file-zone {
+      border: 1px solid var(--border); border-radius: 12px;
+      padding: 14px 16px; background: #fbfefb; display: grid; gap: 8px;
+    }
+    .file-zone label { font-weight: 600; font-size: .92rem; }
+    input[type="file"] {
+      border: 1px solid var(--border); border-radius: 10px;
+      padding: 8px; background: #fff; width: 100%; font-size: .9rem;
+    }
+    button {
+      border: 1px solid #26663d; background: var(--accent); color: #fff;
+      border-radius: 10px; padding: 10px 20px; font-weight: 600;
+      font-size: .95rem; cursor: pointer; transition: opacity .15s;
+    }
+    button:hover:not(:disabled) { opacity: .88; }
+    button:disabled { opacity: .5; cursor: not-allowed; }
+    button.secondary {
+      background: #fff; color: var(--accent); border: 1px solid var(--accent-2);
+    }
+    button.secondary:hover:not(:disabled) { background: #f3fbf6; }
+    .status {
+      border: 1px dashed var(--border); background: #fbfefb;
+      border-radius: 10px; padding: 10px; font-size: .92rem;
+      white-space: pre-wrap; display: none;
+    }
+    .status.ok  { display: block; color: var(--ok);   border-color: var(--accent-2); background: #f3fbf6; }
+    .status.err { display: block; color: var(--warn); border-color: #f0d090;         background: #fffaf0; }
+    .result-item { border: 1px solid var(--border); border-radius: 12px; overflow: hidden; margin-top: 10px; }
+    .result-header {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 11px 16px; background: #f0f8f3; cursor: pointer; user-select: none;
+    }
+    .result-header:hover { background: #e8f5ec; }
+    .result-meta { display: flex; align-items: center; gap: 8px; }
+    .result-filename { font-weight: 600; font-size: .92rem; }
+    .pill {
+      display: inline-block; border: 1px solid var(--accent-2); background: #f3fbf6;
+      color: var(--ok); border-radius: 999px; padding: 3px 8px;
+      font-size: .78rem; font-weight: 600;
+    }
+    .result-actions { display: flex; gap: 8px; }
+    .result-actions button { padding: 5px 13px; font-size: .82rem; }
+    .result-preview { display: none; border-top: 1px solid var(--border); }
+    .result-preview.open { display: block; }
+    .result-preview iframe { width: 100%; height: 520px; border: none; display: block; }
+    .footer {
+      padding: 12px 24px 18px; color: var(--muted); font-size: .83rem;
+      border-top: 1px solid var(--border); background: #fcfffc;
+    }
+    @media (max-width: 640px) {
+      .head, .body, .footer { padding-left: 14px; padding-right: 14px; }
+      h1 { font-size: 1.1rem; }
+    }
+  </style>
 </head>
 <body>
-    <h2>Wizualizator dowodów e-Doręczeń</h2>
-    <form id="xmlForm" name="xmlForm">
-        <label for="input">Wybierz plik XML z dowodem pobranym z EZD:</label>
-        <input id="input" type="file" accept=".xml" value="Wybierz plik"/>
-        <input type="submit" value="Prześlij" />
-    </form>
-    <script>
-       const options = {
-          weekday: 'long',
-          year: 'numeric',
-          month: 'long',
-          day: 'numeric',
-          hour: "numeric",
-          minute: "numeric",
-          second: "numeric"
-       };
-       var readXml = null;
-       $('#xmlForm').submit(function(event) {
-           event.preventDefault();
-           var selectedFile = document.getElementById('input').files[0];
-           var reader = new FileReader();
-           var s = new XMLSerializer();
-           reader.onload = function(e) {
-               readXml=e.target.result;
-               var parser = new DOMParser();
-               var doc = parser.parseFromString(readXml, "application/xml");
-               var nodes = doc.querySelectorAll("*");
-               for (var i = 0; i < nodes.length; i++) {
-                    if (nodes[i].childNodes.length == 1 && 
-                        nodes[i].childNodes[0].nodeType == 3 && 
-                        nodes[i].tagName != 'mstns:PodpisObraz') {
-                        if (!(isNaN(new Date(nodes[i].childNodes[0].textContent))) && 
-                            nodes[i].childNodes[0].textContent.length>=19) {
-                          nodes[i].childNodes[0].textContent = new Date(nodes[i].childNodes[0].textContent).toLocaleDateString('pl-PL', options);
-                        }
-                        nodes[i].insertAdjacentHTML('afterBegin', "<span>" + nodes[i].tagName.replace(/([A-Z][a-z])/g, ' $1').trim() + ":</span>");
+<div class="wrap">
+  <div class="card">
+    <div class="head">
+      <h1>Wizualizacja EPO XML</h1>
+      <p class="sub">Lokalnie konwertuje pliki XML (EPO, DN, KEPO, MSEPO) do HTML umożliwiając podgląd oraz wydrukowanie w czytelnej formie.</p>
+    </div>
+    <div class="body">
+      <div class="file-zone">
+        <label for="xmlFiles">Wybierz jeden lub więcej plików XML z dowodami</label>
+        <input type="file" id="xmlFiles" accept=".xml" multiple>
+      </div>
+      <div>
+        <button id="processBtn">Przetwórz</button>
+      </div>
+      <div id="status" class="status"></div>
+      <div id="results"></div>
+    </div>
+    <div class="footer">
+      Działa lokalnie w przeglądarce. Obsługiwane typy: EPO, DN, KEPO, MSEPO.
+      Limit: 50 plików, do 10 MB każdy.
+    </div>
+  </div>
+</div>
+<script>
+const STATUS_MAPPING = {
+  "2": "DORĘCZONA",
+  "4": "BRAK DORĘCZENIA (przez kuriera lub listonosza)",
+  "5": "WYDANA (po awizo)",
+  "6": "ZWROT (po awizo)"
+};
+const ODBIORCA_DORECZONA = {
+  "0":"Adresat","1":"Dorosły domownik","2":"Dozorca","3":"Sołtys",
+  "4":"Administracja domu","5":"Upoważniony pracownik","6":"Przełożony żołnierza",
+  "7":"Przełożony funkcjonariusza Policji",
+  "8":"Przełożony funkcjonariusza Agencji Bezpieczeństwa Wewnętrznego",
+  "9":"Przełożony funkcjonariusza Agencji Wywiadu",
+  "10":"Przełożony funkcjonariusza Służby Kontrwywiadu Wojskowego",
+  "11":"Przełożony funkcjonariusza Służby Wywiadu Wojskowego",
+  "12":"Przełożony funkcjonariusza Straży Granicznej",
+  "13":"Przełożony funkcjonariusza Służby Celnej",
+  "14":"Przełożony funkcjonariusza Centralnego Biura Antykorupcyjnego",
+  "15":"Przełożony funkcjonariusza Służby Więziennej",
+  "16":"Przedstawiciel ustawowy adresata",
+  "20":"Adresat, który nie mógł lub odmówił pokwitowania odbioru przesyłki"
+};
+const BRAK_DORECZENIA = {
+  "0":"Adresat odmówił przyjęcia","1":"Niepełny adres",
+  "2":"Niedoręczona z innych przyczyn",
+  "3":"Nie podjęto przesyłki z placówki pocztowej lub urzędu gminy"
+};
+const ODBIORCA_AWIZO = {
+  "0":"Adresat","1":"Upoważniony pracownik",
+  "2":"Osoba uprawniona do reprezentacji",
+  "3":"Pełnomocnik pocztowy","4":"Przedstawiciel ustawowy adresata"
+};
+const AWIZO_MIEJSCE_PRZESYLKI     = { "0":"Placówka pocztowa","1":"Urząd gminy" };
+const AWIZO_MIEJSCE_ZAWIADOMIENIA = {
+  "0":"Skrzynka oddawcza","1":"Drzwi","2":"Skrytka pocztowa",
+  "3":"Inne widoczne miejsce","4":"Biuro","5":"Inne pomieszczenie",
+  "6":"Inne widoczne miejsce przy wejściu na posesję"
+};
 
-                    }
-                    else if (nodes[i].childNodes.length > 1) {
-                        nodes[i].insertAdjacentHTML('afterBegin', nodes[i].tagName.replace(/([A-Z])/g, ' $1').trim() + ": ");
-                    }
-                    else if (nodes[i].childNodes.length == 0 && nodes[i].tagName != 'mstns:Podpis') {
-                        nodes[i].insertAdjacentHTML('afterBegin', "<span>" + nodes[i].tagName.replace(/([A-Z])/g, ' $1').trim() + ":</span> —");
-                    }
-                    else if (nodes[i].childNodes.length == 0 && nodes[i].tagName == 'mstns:Podpis') {
-                        nodes[i].insertAdjacentHTML('afterBegin', "<span>" + nodes[i].tagName.replace(/([A-Z])/g, ' $1').trim() + ":</span>");
-                    }
-                    else if (nodes[i].tagName == 'mstns:PodpisObraz') {
-                        nodes[i].insertAdjacentHTML('afterBegin', '<img src="data:image/png;base64, ' + nodes[i].childNodes[0].textContent + '" />');
-                            nodes[i].childNodes[1].textContent = ''
-                    }
-               }
-               str = s.serializeToString(doc);
-               document.querySelector('#content').innerHTML = str.replace(/(mstns:\s)/g, '');
-           }
-           text = reader.readAsText(selectedFile);
-       });
-    </script>
-    <div id="content" />
+const IGNORED_TAGS = new Set([
+  'TabletKartaEpo','IDKartaEPO','TabletPrzesylki','TabletPrzesylkaPodpis',
+  'TabletPrzesylka','CzasNaciskList','Nacisk','CzasNacisk','Czas',
+  'DaneBiometryczne','X','Y','KartaEpo','IdKartyEPO'
+]);
+const EMPTY_OK_TAGS = new Set([
+  'NumerLokalu','InformacjeNadawcy','StrefaListowa','Lokal','Sygnatura',
+  'Rodzaj','ImieINazwiskoOdbiorcy','Podpis','TabletJednostkaMS','IDJednostkaMS',
+  'NazwaJednostki','Wydzial','Miasto','KodPocztowy','Ulica','Dom','Nazwa2','Telefon'
+]);
+const BREAK_TAGS = new Set(['Podpis','PodpisObraz']);
+
+const MAX_FILE_SIZE = 10 * 1024 * 1024;
+const MAX_FILES     = 50;
+
+function esc(s) {
+  return String(s)
+    .replace(/&/g,'&amp;').replace(/</g,'&lt;')
+    .replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+}
+
+function red(t) { return `<strong class="red">${esc(t)}</strong>`; }
+
+function imageFromBase64(b64) {
+  try {
+    const d = atob(b64);
+    if (d.length < 4) return null;
+    const b = i => d.charCodeAt(i);
+    if (b(0)===0x89 && d.slice(1,4)==='PNG')        return 'image/png';
+    if (b(0)===0xFF && b(1)===0xD8 && b(2)===0xFF)  return 'image/jpeg';
+    if (d.slice(0,4)==='GIF8')                       return 'image/gif';
+    if (d.slice(0,2)==='BM')                         return 'image/bmp';
+    return null;
+  } catch { return null; }
+}
+
+function splitCamelCase(s) {
+  const words = s.match(/[A-ZĄĆĘŁŃÓŚŹŻ]+(?=[A-ZĄĆĘŁŃÓŚŹŻ][a-ząćęłńóśźż]|$)|[A-ZĄĆĘŁŃÓŚŹŻ]?[a-ząćęłńóśźż]+|\d+/g);
+  if (!words?.length) return s;
+  const fmt = words.map(w => /^[A-ZĄĆĘŁŃÓŚŹŻ]{2,}$/.test(w) ? w : w.toLowerCase());
+  fmt[0] = fmt[0].charAt(0).toUpperCase() + fmt[0].slice(1);
+  return fmt.join(' ');
+}
+
+function formatDate(v) {
+  const m = v.length >= 19 && v.match(/^(\d{4}-\d{2}-\d{2})[T ](\d{2}:\d{2}:\d{2})/);
+  return m ? m[1] + ' ' + m[2] : v;
+}
+
+function directText(el) {
+  let t = '';
+  for (const c of el.childNodes)
+    if (c.nodeType === Node.TEXT_NODE) t += c.textContent;
+  return t.trim();
+}
+
+function iterAll(root) {
+  const out = [], stack = [root];
+  while (stack.length) {
+    const n = stack.pop();
+    if (n.nodeType !== Node.ELEMENT_NODE) continue;
+    out.push(n);
+    for (let i = n.childNodes.length - 1; i >= 0; i--)
+      stack.push(n.childNodes[i]);
+  }
+  return out;
+}
+
+function processXml(xmlText) {
+  const doc = new DOMParser().parseFromString(xmlText, 'application/xml');
+  const parseErr = doc.querySelector('parsererror');
+  if (parseErr) throw new Error('Błąd XML: ' + parseErr.textContent.slice(0, 120));
+
+  for (const tag of ['PrzesylkaSkrot','PodpisCyfrowy'])
+    for (const el of [...doc.getElementsByTagNameNS('KartaEPO/2018/07/15', tag),
+                       ...doc.getElementsByTagName(tag)])
+      el.parentNode?.removeChild(el);
+
+  const nodes = iterAll(doc.documentElement);
+
+  let kind = '';
+  for (const n of nodes) {
+    const local = n.localName, ns = n.namespaceURI || '';
+    if      (local === 'ValidationEvidence')                                                    { kind = 'VE';    break; }
+    else if (local === 'DowodNadania')                                                          { kind = 'DN';    break; }
+    else if (ns === 'KartaEPO/2018/07/15' && local === 'KartaEpo')                             { kind = 'KEPO';  break; }
+    else if (ns === 'http://msepo.gov.pl/epo/XSD/KartaEPO.xsd' && local === 'TabletKartaEpo') { kind = 'MSEPO'; break; }
+  }
+
+  let status = '-1', rows = '';
+
+  for (const node of nodes) {
+    let tag = node.localName;
+    if (IGNORED_TAGS.has(tag)) continue;
+
+    if (tag === 'ValidationEvidence') tag = 'Dowód walidacji';
+    if (tag === 'CreationDate')       tag = 'Data utworzenia';
+
+    const rawVal = directText(node);
+    let val = esc(formatDate(rawVal));
+
+    if (tag === 'Opis' && kind === 'VE')
+      val = `<span class="red">${val}</span>`;
+
+    if ((tag === 'PodpisObraz' || tag === 'Podpis') && rawVal) {
+      if (rawVal.startsWith('MII')) {
+        val = 'PODPISANO CERTYFIKATEM PKCS #12';
+      } else {
+        const mime = imageFromBase64(rawVal);
+        if (mime) val = `<img src="data:${mime};base64,${rawVal}" alt="Podpis">`;
+      }
+    }
+
+    if (tag === 'NumerNadania' && rawVal)
+      val = `<a href="https://emonitoring.poczta-polska.pl/?numer=${encodeURIComponent(rawVal)}" target="_blank" rel="noopener noreferrer">${esc(rawVal)}</a>`;
+
+    if (tag === 'StatusPrzesylki' && Object.hasOwn(STATUS_MAPPING, rawVal) && status === '-1')
+      { status = rawVal; val = red(STATUS_MAPPING[rawVal]); }
+    if (tag === 'OdbiorcaPrzesylki' && status === '2' && Object.hasOwn(ODBIORCA_DORECZONA, rawVal))
+      val = red(ODBIORCA_DORECZONA[rawVal]);
+    if (tag === 'OdbiorcaPrzesylki' && status === '5' && Object.hasOwn(ODBIORCA_AWIZO, rawVal))
+      val = red(ODBIORCA_AWIZO[rawVal]);
+    if (tag === 'BrakDoreczenia' && (status==='4'||status==='6') && Object.hasOwn(BRAK_DORECZENIA, rawVal))
+      val = red(BRAK_DORECZENIA[rawVal]);
+    if (tag === 'AwizoMiejscePrzesylki' && Object.hasOwn(AWIZO_MIEJSCE_PRZESYLKI, rawVal))
+      val = red(AWIZO_MIEJSCE_PRZESYLKI[rawVal]);
+    if (tag === 'AwizoMiejsceZawiadomienia' && Object.hasOwn(AWIZO_MIEJSCE_ZAWIADOMIENIA, rawVal))
+      val = red(AWIZO_MIEJSCE_ZAWIADOMIENIA[rawVal]);
+
+    const label = esc(splitCamelCase(tag));
+    if (rawVal === '' && !EMPTY_OK_TAGS.has(tag))
+      rows += `<tr><th colspan="2"><h4>${label}</h4></th></tr>\n`;
+    else
+      rows += `<tr><td><strong>${label}</strong></td><td${BREAK_TAGS.has(tag) ? ' class="break"' : ''}>${val}</td></tr>\n`;
+  }
+
+  return {
+    kind: kind || 'Nieznany',
+    html: `<!DOCTYPE html>
+<html lang="pl">
+<head>
+  <meta charset="UTF-8">
+  <title>Wizualizacja elektronicznego dowodu (pliku w formacie XML)</title>
+  <style>
+    body { font-family: Arial, sans-serif; margin: 20px; }
+    table { width: 100%; border-collapse: collapse; margin-top: 20px; }
+    th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
+    th { background: #f2f2f2; }
+    td.break { word-break: break-all; overflow-wrap: break-word; max-width: 600px; }
+    img { max-width: 400px; }
+    h4 { margin: 0; }
+    .red { color: red; }
+    .doc-type { color: #888; font-size: .85rem; }
+  </style>
+</head>
+<body>
+<h2>Dane z elektronicznego dowodu (pliku XML)</h2>
+<p class="doc-type">Typ dokumentu: <strong>${esc(kind||'Nieznany')}</strong></p>
+<table>
+<tr><th>Nazwa</th><th>Wartość</th></tr>
+${rows}
+</table>
+</body>
+</html>`
+  };
+}
+
+function printHtml(html) {
+  const existing = document.getElementById('__printFrame');
+  if (existing) existing.remove();
+  const printReady = html.replace(
+    '</body>',
+    '<script>window.addEventListener("load",function(){window.print();});<\/script></body>'
+  );
+  const iframe = document.createElement('iframe');
+  iframe.id = '__printFrame';
+  iframe.style.cssText = 'position:fixed;width:0;height:0;border:0;top:0;left:0;';
+  iframe.setAttribute('sandbox', 'allow-scripts allow-modals');
+  document.body.appendChild(iframe);
+  iframe.srcdoc = printReady;
+  setTimeout(() => document.getElementById('__printFrame')?.remove(), 60000);
+}
+
+function setStatus(msg, type) {
+  const el = document.getElementById('status');
+  el.className = 'status' + (type ? ' ' + type : '');
+  el.textContent = msg;
+}
+
+async function processFiles() {
+  const fileInput = document.getElementById('xmlFiles');
+  const btn       = document.getElementById('processBtn');
+  const resultsEl = document.getElementById('results');
+
+  setStatus('', '');
+  const allFiles = [...fileInput.files].filter(f => f.name.toLowerCase().endsWith('.xml'));
+  if (!allFiles.length)            { setStatus('Nie wybrano żadnych plików XML.', 'err'); return; }
+  if (allFiles.length > MAX_FILES) { setStatus(`Maksymalnie ${MAX_FILES} plików jednocześnie.`, 'err'); return; }
+
+  btn.disabled = true;
+  setStatus(`Przetwarzanie ${allFiles.length} plik(ów)...`, 'ok');
+  resultsEl.innerHTML = '';
+
+  let ok = 0, errMsg = '';
+  for (const file of allFiles) {
+    if (file.size > MAX_FILE_SIZE) {
+      errMsg += `${file.name}: plik zbyt duży (max 10 MB).\n`;
+      continue;
+    }
+    try {
+      const { html, kind } = processXml(await file.text());
+      appendResult(resultsEl, file.name.replace(/\.xml$/i, ''), kind, html);
+      ok++;
+    } catch (e) {
+      errMsg += `${file.name}: ${e.message}\n`;
+    }
+  }
+
+  errMsg
+    ? setStatus(errMsg.trim(), 'err')
+    : setStatus(`Gotowe: ${ok} przetworzono.`, 'ok');
+  btn.disabled = false;
+}
+
+function appendResult(container, baseName, kind, html) {
+  const id  = 'p' + Math.random().toString(36).slice(2);
+  const div = document.createElement('div');
+  div.className = 'result-item';
+  div.innerHTML = `
+    <div class="result-header">
+      <span class="result-meta">
+        <span class="result-filename">${esc(baseName)}.html</span>
+        <span class="pill">${esc(kind)}</span>
+      </span>
+      <span class="result-actions">
+        <button class="secondary" data-toggle="${id}">Podgląd</button>
+        <button data-print>Drukuj</button>
+      </span>
+    </div>
+    <div class="result-preview" id="${id}">
+      <iframe sandbox="allow-popups allow-popups-to-escape-sandbox"></iframe>
+    </div>`;
+
+  div.querySelector('[data-toggle]').addEventListener('click', e => {
+    e.stopPropagation();
+    const preview = document.getElementById(id);
+    const iframe  = preview.querySelector('iframe');
+    if (!iframe.srcdoc) iframe.srcdoc = html;
+    preview.classList.toggle('open');
+  });
+  div.querySelector('[data-print]').addEventListener('click', e => {
+    e.stopPropagation();
+    printHtml(html);
+  });
+  div.querySelector('.result-header').addEventListener('click', () =>
+    div.querySelector('[data-toggle]').click()
+  );
+  container.appendChild(div);
+}
+
+document.getElementById('processBtn').addEventListener('click', processFiles);
+</script>
 </body>
 </html>
